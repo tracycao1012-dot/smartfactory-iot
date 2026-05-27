@@ -65,15 +65,16 @@ class SensorResource(resource.ObservableResource):
         self.line        = line
         self.sensor_type = sensor_type
         self._reading    = _sim(sensor_type)
-        # TODO: start the background update loop
-        # Hint: asyncio.ensure_future(self._update_loop())
+        asyncio.ensure_future(self._update_loop())
 
     async def _update_loop(self) -> None:
         """
         TODO 2: Every 5 seconds, simulate a new reading and notify observers.
         """
-        # TODO: implement this coroutine
-        pass
+        while True:
+            await asyncio.sleep(5)
+            self._reading = _sim(self.sensor_type)
+            self.updated_state()
 
     async def render_get(self, request: Message) -> Message:
         """
@@ -81,8 +82,7 @@ class SensorResource(resource.ObservableResource):
         Hint: use aiocoap.numbers.contentformat.ContentFormat.JSON (value 50)
               or pass content_format=50 to Message(...)
         """
-        # TODO: implement this method
-        raise NotImplementedError
+        return Message(payload=_json(self._reading), content_format=50)
 
 
 # ── Actuator Resource ─────────────────────────────────────────────────────────
@@ -107,13 +107,20 @@ class ActuatorResource(resource.Resource):
 
     async def render_get(self, request: Message) -> Message:
         """TODO 5: Return current fan state as JSON."""
-        # TODO: implement this method
-        raise NotImplementedError
+        return Message(payload=_json({"state": self._state}), content_format=50)
 
     async def render_put(self, request: Message) -> Message:
         """TODO 6: Accept ON/OFF command and update state."""
-        # TODO: implement this method
-        raise NotImplementedError
+        try:
+            payload_str = request.payload.decode('utf-8')
+            data = json.loads(payload_str)
+            if "state" in data and data["state"] in ["ON", "OFF"]:
+                self._state = data["state"]
+                return Message(code=Code.CHANGED)
+            else:
+                return Message(code=Code.BAD_REQUEST)
+        except Exception:
+            return Message(code=Code.BAD_REQUEST)
 
 
 # ── Block-wise Manifest Resource ──────────────────────────────────────────────
@@ -134,10 +141,18 @@ class ManifestResource(resource.Resource):
 
     async def render_get(self, request: Message) -> Message:
         """TODO 8: Return a >= 3 KB JSON firmware manifest."""
-        # TODO: implement this method
-        # Hint: build a large dict with ~50 firmware entries, json.dumps it
-        # Verify: len(payload) >= 3072
-        raise NotImplementedError
+        manifest = {
+            "firmwares": [
+                {
+                    "sensor_id": f"sensor_{i}",
+                    "version": "1.0.0",
+                    "checksum": "d41d8cd98f00b204e9800998ecf8427e",
+                    "url": f"http://update.server/firmware_{i}.bin"
+                }
+                for i in range(100)
+            ]
+        }
+        return Message(payload=_json(manifest), content_format=50)
 
 
 # ── Resource Tree & Server Setup ──────────────────────────────────────────────
@@ -160,16 +175,17 @@ async def build_server() -> aiocoap.Context:
     """
     root = resource.Site()
 
-    # TODO: register all resources
-    # Example:
-    #   root.add_resource(['factory', 'line1', 'temperature'],
-    #                     SensorResource('line1', 'temperature'))
+    root.add_resource(['factory', 'line1', 'temperature'], SensorResource('line1', 'temperature'))
+    root.add_resource(['factory', 'line1', 'vibration'], SensorResource('line1', 'vibration'))
+    root.add_resource(['factory', 'line1', 'power'], SensorResource('line1', 'power'))
+    root.add_resource(['factory', 'line2', 'temperature'], SensorResource('line2', 'temperature'))
+    root.add_resource(['actuator', 'line1', 'fan'], ActuatorResource())
+    root.add_resource(['factory', 'manifest'], ManifestResource())
 
-    # TODO: add /.well-known/core
-    # root.add_resource(['.well-known', 'core'],
-    #                   resource.WKCResource(root.get_resources_as_linkheader))
+    root.add_resource(['.well-known', 'core'],
+                      resource.WKCResource(root.get_resources_as_linkheader))
 
-    context = await aiocoap.Context.create_server_context(root)
+    context = await aiocoap.Context.create_server_context(root, bind=('127.0.0.1', 5683))
     return context
 
 

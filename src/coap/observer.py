@@ -56,8 +56,21 @@ class FactoryObserver:
         Hint: wrap the observation loop in asyncio.wait_for or use asyncio.create_task
               to run both line1 and line2 observations concurrently.
         """
-        # TODO: implement this coroutine
-        raise NotImplementedError
+        request = Message(code=Code.GET, uri=uri, observe=0)
+        pr = self._ctx.request(request)
+
+        async def _loop():
+            try:
+                async for response in pr.observation:
+                    self._handle_notification(uri, response)
+            except asyncio.CancelledError:
+                pass
+
+        task = asyncio.create_task(_loop())
+        await asyncio.sleep(OBSERVE_DURATION)
+        pr.observation.cancel()
+        task.cancel()
+        log.info(f"Deregistered from {uri}")
 
     def _handle_notification(self, uri: str, response: Message) -> None:
         """
@@ -74,8 +87,28 @@ class FactoryObserver:
           - Log:
               [OBSERVE] {uri}  seq={seq}  val={value} {unit}  @ {timestamp}
         """
-        # TODO: implement this method
-        pass
+        seq = response.opt.observe
+        last = self._last_seq.get(uri, -1)
+
+        if seq is not None and last != -1:
+            # Simple check for stale ignoring full wrap-around edge cases for simplicity, 
+            # but handles basic <= check as required
+            if seq <= last and (last - seq) < (1 << 23):
+                self._stale_count[uri] = self._stale_count.get(uri, 0) + 1
+                log.info(f"STALE notification on {uri}: seq={seq} <= last={last}")
+                return
+
+        if seq is not None:
+            self._last_seq[uri] = seq
+
+        try:
+            data = json.loads(response.payload.decode('utf-8'))
+            val = data.get("value")
+            unit = data.get("unit", "")
+            ts = data.get("ts")
+            log.info(f"[OBSERVE] {uri}  seq={seq}  val={val} {unit}  @ {ts}")
+        except Exception:
+            pass
 
     # ── Block2 Transfer ────────────────────────────────────────────────────────
 
@@ -92,8 +125,19 @@ class FactoryObserver:
         Bonus: manually track how many Block2 blocks were received by
                checking response.opt.block2 if available.
         """
-        # TODO: implement this coroutine
-        raise NotImplementedError
+        request = Message(code=Code.GET, uri=f"{SERVER_BASE}/factory/manifest")
+        response = await self._ctx.request(request).response
+        payload = response.payload
+        log.info(f"Manifest received: {len(payload)} bytes")
+        
+        try:
+            data = json.loads(payload.decode('utf-8'))
+            count = len(data.get("firmwares", []))
+            log.info(f"Firmware entries in manifest: {count}")
+        except Exception:
+            pass
+            
+        log.info("Block2 transfer complete")
 
     # ── Run ────────────────────────────────────────────────────────────────────
 
@@ -110,8 +154,20 @@ class FactoryObserver:
         """
         await self.start()
         try:
-            # TODO: implement the observation + manifest logic
-            pass
+            uri1 = f"{SERVER_BASE}/factory/line1/temperature"
+            uri2 = f"{SERVER_BASE}/factory/line2/temperature"
+            
+            await asyncio.gather(
+                self.observe_resource(uri1),
+                self.observe_resource(uri2)
+            )
+            
+            await self.fetch_manifest()
+            
+            print("\n── Stale Notifications Summary ──")
+            for uri, count in self._stale_count.items():
+                print(f"{uri}: {count}")
+            print("──────────────────────────────────")
         finally:
             await self.stop()
 
