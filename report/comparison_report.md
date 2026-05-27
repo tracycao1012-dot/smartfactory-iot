@@ -1,7 +1,7 @@
 # Module 1 Assignment — Protocol Comparison Report
 
-**Student Name:** Trang Cao
-**Student ID:**   123456789
+**Student Name:** Thuy Trang Cao
+**Student ID:**   101015203
 **Date:**         May 27, 2026
 
 ---
