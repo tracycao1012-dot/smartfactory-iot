@@ -9,26 +9,26 @@
 
 | Field | Offset (bytes) | Raw Hex | Decoded Value |
 |-------|---------------|---------|---------------|
-| Frame type + flags (byte 1) | 0 | `__` | Type=CONNECT (____), flags=____ |
-| Remaining length (byte 2) | 1 | `__` | ___ bytes |
-| Protocol name length | 2–3 | `__ __` | 4 |
+| Frame type + flags (byte 1) | 0 | `10` | Type=CONNECT (1), flags=0 |
+| Remaining length (byte 2) | 1 | `2B` | 43 bytes |
+| Protocol name length | 2–3 | `00 04` | 4 |
 | Protocol name | 4–7 | `4D 51 54 54` | "MQTT" |
-| Protocol version | 8 | `__` | __ (MQTT ___) |
-| Connect flags | 9 | `__` | See breakdown below |
-| Keep-alive | 10–11 | `__ __` | ___ seconds |
-| Client ID length | 12–13 | `__ __` | ___ |
-| Client ID | 14–… | `__ …` | "_______" |
+| Protocol version | 8 | `04` | 4 (MQTT 3.1.1) |
+| Connect flags | 9 | `2E` | See breakdown below |
+| Keep-alive | 10–11 | `00 3C` | 60 seconds |
+| Client ID length | 12–13 | `00 1A` | 26 |
+| Client ID | 14–… | `73 6D ...` | "smartfactory-publisher-001" |
 
 **Connect Flags byte breakdown:**
 
 | Bit | Name | Value | Meaning |
 |-----|------|-------|---------|
-| 7 | Username flag | __ | ________ |
-| 6 | Password flag | __ | ________ |
-| 5 | Will retain | __ | ________ |
-| 4–3 | Will QoS | __ | ________ |
-| 2 | Will flag | __ | ________ |
-| 1 | Clean session | __ | ________ |
+| 7 | Username flag | 0 | False |
+| 6 | Password flag | 0 | False |
+| 5 | Will retain | 1 | True |
+| 4–3 | Will QoS | 01 | QoS 1 |
+| 2 | Will flag | 1 | True |
+| 1 | Clean session | 0 | False (Persistent) |
 | 0 | Reserved | 0 | — |
 
 ---
@@ -37,18 +37,18 @@
 
 | Field | Offset (bytes) | Raw Hex | Decoded Value |
 |-------|---------------|---------|---------------|
-| Fixed header byte 1 | 0 | `__` | Type=PUBLISH(____), DUP=_, QoS=__, RETAIN=_ |
-| Remaining length | 1 | `__` | ___ bytes |
-| Topic length | 2–3 | `__ __` | ___ |
-| Topic string | 4–… | `__ …` | "_______" |
-| Packet Identifier | … | `__ __` | ___ |
-| Payload | … | `__ …` | "_______" |
+| Fixed header byte 1 | 0 | `32` | Type=PUBLISH(3), DUP=0, QoS=1, RETAIN=0 |
+| Remaining length | 1 | `5E` | 94 bytes |
+| Topic length | 2–3 | `00 19` | 25 |
+| Topic string | 4–… | `66 61 ...` | "factory/line1/temperature" |
+| Packet Identifier | … | `00 01` | 1 |
+| Payload | … | `7B 22 ...` | '{"value": 70.123, "unit": "C"}' |
 
 **Fixed header byte 1 bit expansion:**
 
 | Bits 7–4 (packet type) | Bit 3 (DUP) | Bits 2–1 (QoS) | Bit 0 (RETAIN) |
 |------------------------|-------------|----------------|----------------|
-| `____` = PUBLISH (3)  | `_` = ___   | `__` = QoS _   | `_` = ___      |
+| `0011` = PUBLISH (3)  | `0` = False | `01` = QoS 1 | `0` = False |
 
 ---
 
@@ -56,11 +56,11 @@
 
 | Field | Offset | Raw Hex | Decoded Value |
 |-------|--------|---------|---------------|
-| Fixed header | 0 | `__` | Type=PUBACK (0100) |
+| Fixed header | 0 | `40` | Type=PUBACK (01000000) |
 | Remaining length | 1 | `02` | 2 bytes |
-| Packet Identifier | 2–3 | `__ __` | ___ |
+| Packet Identifier | 2–3 | `00 01` | 1 |
 
-**Packet Identifier match:** PUBLISH PKT ID = ___ ; PUBACK PKT ID = ___ ; **Match? ___**
+**Packet Identifier match:** PUBLISH PKT ID = 1 ; PUBACK PKT ID = 1 ; **Match? Yes**
 
 ---
 
@@ -69,28 +69,28 @@
 ### CON GET Request
 
 ```
-Bytes: __ __ __ __  __ __ __ __  __ ...
+Bytes: 44 01 AD 13  B1 4F AB E1  B7 ...
        [   Header   ] [  Token  ] [Options...]
 ```
 
 | Field | Bits/Bytes | Raw Value | Decoded Value |
 |-------|-----------|-----------|---------------|
-| Version (bits 7–6) | 2 bits | `__` | __ (always 1) |
-| Type (bits 5–4) | 2 bits | `__` | __ = CON |
-| TKL (bits 3–0) | 4 bits | `__` | Token length = __ |
-| Code (byte 1) | 8 bits | `__` | _.___ = GET |
-| Message ID (bytes 2–3) | 16 bits | `__ __` | ___ |
-| Token (bytes 4–TKL+3) | TKL bytes | `__ …` | 0x______ |
-| Option Delta | 4 bits | `__` | Delta = __, Option# = __ (___) |
-| Option Length | 4 bits | `__` | ___ |
-| Option Value | ___ bytes | `__ …` | "________" (Uri-Path) |
+| Version (bits 7–6) | 2 bits | `01` | 1 (always 1) |
+| Type (bits 5–4) | 2 bits | `00` | 0 = CON |
+| TKL (bits 3–0) | 4 bits | `04` | Token length = 4 |
+| Code (byte 1) | 8 bits | `01` | 0.01 = GET |
+| Message ID (bytes 2–3) | 16 bits | `AD 13` | 44307 |
+| Token (bytes 4–TKL+3) | TKL bytes | `B1 4F ...` | 0xB14FABE1 |
+| Option Delta | 4 bits | `B` | Delta = 11, Option# = 11 (Uri-Path) |
+| Option Length | 4 bits | `7` | 7 |
+| Option Value | 7 bytes | `66 61 ...` | "factory" (Uri-Path) |
 
 **Byte 0 full expansion:**
 
 | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3 | Bit 2 | Bit 1 | Bit 0 |
 |-------|-------|-------|-------|-------|-------|-------|-------|
 | Ver   | Ver   | T     | T     | TKL   | TKL   | TKL   | TKL   |
-| `_`   | `_`   | `_`   | `_`   | `_`   | `_`   | `_`   | `_`   |
+| `0`   | `1`   | `0`   | `0`   | `0`   | `1`   | `0`   | `0`   |
 
 ---
 
@@ -98,13 +98,13 @@ Bytes: __ __ __ __  __ __ __ __  __ ...
 
 | Field | Bytes | Raw Hex | Decoded Value |
 |-------|-------|---------|---------------|
-| Fixed header byte 0 | 0 | `__` | Ver=01, T=10 (ACK), TKL=__ |
-| Code byte 1 | 1 | `__` | 2.05 = Content |
-| Message ID | 2–3 | `__ __` | ___ (matches request? ___) |
-| Token | 4–… | `__ …` | 0x______ (matches request? ___) |
-| Option: Content-Format | … | `__ __` | Option# = 12, Value = __ (___) |
+| Fixed header byte 0 | 0 | `64` | Ver=01, T=10 (ACK), TKL=4 |
+| Code byte 1 | 1 | `45` | 2.05 = Content |
+| Message ID | 2–3 | `AD 13` | 44307 (matches request? Yes) |
+| Token | 4–… | `B1 4F ...` | 0xB14FABE1 (matches request? Yes) |
+| Option: Content-Format | … | `11 32` | Option# = 12, Value = 50 (app/json) |
 | Payload Marker | … | `FF` | 0xFF |
-| Payload | … | `__ …` | "_______" |
+| Payload | … | `7B 22 ...` | '{"value": 70.1, "unit": "C"}' |
 
 ---
 
@@ -112,10 +112,10 @@ Bytes: __ __ __ __  __ __ __ __  __ ...
 
 | Field | Value |
 |-------|-------|
-| Observe option number | ___ |
-| Observe sequence value | ___ |
-| Message type | ___ (CON / NON) |
-| Response code | ___ |
+| Observe option number | 6 |
+| Observe sequence value | 1 |
+| Message type | NON (or CON) |
+| Response code | 2.05 Content |
 
 ---
 
